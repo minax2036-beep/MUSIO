@@ -32,17 +32,23 @@ Music files imported into MUSIO are separate works and are not automatically cov
 
 ## Status
 
-Early development — System foundation v0.1.0.
+Early development — Audio Engine v0.1.0.
 
 Current foundation includes:
-- Modular system lifecycle
-- Event bus for module communication
+- Modular system lifecycle and event bus
 - Browser environment detection
-- Initial responsive dark interface
+- Local audio file import (temporary browser session)
+- Playback, pause, previous/next, seek, and volume controls
+- Responsive dark player interface
+
+Notes:
+- Imported files are held in memory as browser file references; they are not uploaded or copied to a server.
+- The current library is temporary and must be selected again after a page reload.
+- Supported audio formats depend on the browser and its available codecs.
 
 Next milestones:
-1. Audio Engine
-2. Library and metadata
+1. Folder access and persistent library
+2. Track metadata and search
 3. IndexedDB storage
-4. Playlists and queue
+4. Playlists and queue persistence
 5. Raspberry Pi server integration
