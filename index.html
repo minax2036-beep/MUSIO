@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101014">
+  <meta name="description" content="MUSIO — YOUR MUSIC. YOUR SYSTEM.">
+  <title>MUSIO</title>
+  <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="./" aria-label="MUSIO Home">
+        <span class="brand-mark">M</span>
+        <span class="brand-name">MUSIO</span>
+      </a>
+
+      <nav class="primary-nav" aria-label="メインメニュー">
+        <a class="nav-item active" href="#home" data-page="home"><span class="nav-icon">⌂</span>ホーム</a>
+        <a class="nav-item" href="#search" data-page="search"><span class="nav-icon">⌕</span>検索</a>
+        <a class="nav-item" href="#library" data-page="library"><span class="nav-icon">▤</span>ライブラリ</a>
+      </nav>
+
+      <div class="sidebar-section">
+        <p class="section-label">YOUR COLLECTION</p>
+        <button class="nav-item" type="button" id="create-playlist"><span class="nav-icon">＋</span>プレイリストを作成</button>
+        <a class="nav-item" href="#liked" data-page="liked"><span class="nav-icon">♡</span>お気に入り</a>
+      </div>
+
+      <div class="sidebar-footer">
+        <span class="connection-dot"></span>
+        <span>ローカルモード</span>
+        <span class="version">v0.1.0</span>
+      </div>
+    </aside>
+
+    <main class="main-content" id="main-content">
+      <header class="topbar">
+        <div class="history-controls" aria-label="履歴">
+          <button class="round-button" type="button" aria-label="戻る" disabled>‹</button>
+          <button class="round-button" type="button" aria-label="進む" disabled>›</button>
+        </div>
+        <div class="topbar-status"><span class="status-pulse"></span> MUSIO SYSTEM ONLINE</div>
+      </header>
+
+      <section class="welcome-section" id="home">
+        <p class="eyebrow">YOUR MUSIC. YOUR SYSTEM.</p>
+        <h1>音楽のある場所を、<span>ひとつに。</span></h1>
+        <p class="welcome-copy">自分の音楽を、自分のシステムで管理する。</p>
+      </section>
+
+      <section class="system-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">SYSTEM STATUS</p>
+            <h2>MUSIO Core</h2>
+          </div>
+          <span class="status-badge"><span class="connection-dot"></span>稼働中</span>
+        </div>
+        <div class="system-grid">
+          <article class="system-card">
+            <span class="system-card-label">CORE VERSION</span>
+            <strong id="core-version">—</strong>
+            <span class="system-card-note">System module</span>
+          </article>
+          <article class="system-card">
+            <span class="system-card-label">MODULES</span>
+            <strong id="module-count">—</strong>
+            <span class="system-card-note">Registered modules</span>
+          </article>
+          <article class="system-card">
+            <span class="system-card-label">STORAGE</span>
+            <strong id="storage-status">—</strong>
+            <span class="system-card-note">Browser environment</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="next-section">
+        <div>
+          <p class="section-label">GET STARTED</p>
+          <h2>ここからMUSIOを育てよう。</h2>
+          <p>System基盤を初期化しました。次はAudio EngineとLibraryを接続していきます。</p>
+        </div>
+        <div class="orb" aria-hidden="true"><span></span></div>
+      </section>
+      <footer class="main-footer">MUSIO <span>•</span> Open-source music system</footer>
+    </main>
+  </div>
+
+  <script type="module" src="./assets/js/app.js"></script>
+</body>
+</html>
