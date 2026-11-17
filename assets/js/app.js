@@ -129,7 +129,7 @@ function renderTracks() {
   const query = ui.search.value.trim().toLocaleLowerCase();
   const favoritesOnly = ui.filter.value === "favorites";
   const filtered = tracks.filter(item => {
-    const matches = (item.record.title + " " + item.record.name).toLocaleLowerCase().includes(query);
+    const matches = [item.record.title, item.record.name, item.record.artist, item.record.album].join(" ").toLocaleLowerCase().includes(query);
     return matches && (!favoritesOnly || item.record.favorite);
   });
   ui.count.textContent = filtered.length + " / " + tracks.length + " TRACKS";
@@ -299,10 +299,12 @@ function setupControls() {
     try {
       const current = await library.getTracks();
       let completed = 0;
+      const fileRecords = await library.getFiles();
+      const fileMap = new Map(fileRecords.map(item => [item.id, item.file]));
       for (const record of current) {
-        const fileRecord = (await library.getFiles()).find(item => item.id === record.id);
-        if (fileRecord) {
-          const metadata = await readAudioTags(fileRecord.file);
+        const file = fileMap.get(record.id);
+        if (file) {
+          const metadata = await readAudioTags(file);
           await library.updateTrackMetadata(record.id, metadata);
         }
         completed += 1;
