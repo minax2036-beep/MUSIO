@@ -2,12 +2,15 @@ import { MUSIO_CONFIG } from "./core/config.js";
 import { MusioSystem } from "./core/system.js";
 import { AudioEngine } from "./audio/engine.js";
 import { LibraryStore } from "./library/library-store.js";
+import { FolderAccess } from "./library/folder-access.js";
 
 const system = new MusioSystem(MUSIO_CONFIG);
 let audioEngine = null;
 let library = null;
 let tracks = [];
 let seekDragging = false;
+const folderAccess = new FolderAccess();
+let musicDirectory = null;
 
 system.register("environment", {
   async init() {
@@ -34,6 +37,7 @@ const $ = selector => document.querySelector(selector);
 const ui = {
   version: $("#core-version"), modules: $("#module-count"), storage: $("#storage-status"),
   nav: document.querySelectorAll("[data-page]"), add: $("#add-music"), files: $("#music-files"),
+  chooseFolder: $("#choose-folder"), rescanFolder: $("#rescan-folder"), folderStatus: $("#folder-status"),
   list: $("#track-list"), count: $("#library-count"), title: $("#now-title"),
   subtitle: $("#now-subtitle"), play: $("#play-pause"), previous: $("#previous-track"),
   next: $("#next-track"), seek: $("#seek-bar"), current: $("#current-time"),
@@ -52,6 +56,58 @@ async function refreshLibrary() {
   tracks = records.map(record => ({ record, file: fileMap.get(record.id) })).filter(item => item.file);
   renderTracks();
   await renderPlaylists();
+}
+
+async function scanMusicFolder() {
+  if (!musicDirectory) {
+    ui.folderStatus.textContent = "フォルダ未選択";
+    return;
+  }
+  ui.folderStatus.textContent = "フォルダをスキャン中…";
+  ui.rescanFolder.disabled = true;
+  try {
+    const entries = await folderAccess.scan(musicDirectory);
+    const result = await library.addFiles(entries.map(entry => ({
+      file: entry.file,
+      relativePath: entry.relativePath,
+      sourceId: musicDirectory.name
+    })));
+    await refreshLibrary();
+    ui.folderStatus.textContent = musicDirectory.name + " • " + entries.length +
+      " ファイル検出 / " + result.added + " 件追加 / " + result.skipped + " 件重複";
+  } catch (error) {
+    console.error("[MUSIO] Folder scan failed.", error);
+    ui.folderStatus.textContent = error?.message || "フォルダを読み込めませんでした。";
+    if (/権限|許可/.test(error?.message || "")) {
+      ui.rescanFolder.disabled = true;
+    }
+  } finally {
+    ui.rescanFolder.disabled = !musicDirectory;
+  }
+}
+
+async function restoreMusicFolder() {
+  if (!folderAccess.supported) {
+    ui.chooseFolder.disabled = true;
+    ui.chooseFolder.title = "このブラウザはフォルダアクセスに対応していません";
+    ui.folderStatus.textContent = "フォルダアクセス非対応。通常のファイル選択を利用してください。";
+    return;
+  }
+  try {
+    musicDirectory = await library.getSetting("musicDirectory");
+    if (!musicDirectory) return;
+    const permission = await folderAccess.getPermission(musicDirectory);
+    if (permission === "granted") {
+      ui.rescanFolder.disabled = false;
+      ui.folderStatus.textContent = musicDirectory.name + " • フォルダ接続済み";
+    } else {
+      ui.rescanFolder.disabled = true;
+      ui.folderStatus.textContent = musicDirectory.name + " • 再アクセス許可が必要です";
+    }
+  } catch (error) {
+    console.warn("[MUSIO] Could not restore folder handle.", error);
+    ui.folderStatus.textContent = "保存したフォルダ情報を復元できませんでした。";
+  }
 }
 
 function renderTracks() {
@@ -201,6 +257,19 @@ function setupEvents() {
 
 function setupControls() {
   ui.add.addEventListener("click", () => ui.files.click());
+  ui.chooseFolder.addEventListener("click", async () => {
+    try {
+      musicDirectory = await folderAccess.chooseDirectory();
+      await library.saveSetting("musicDirectory", musicDirectory);
+      ui.rescanFolder.disabled = false;
+      await scanMusicFolder();
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      console.error("[MUSIO] Folder selection failed.", error);
+      ui.folderStatus.textContent = error?.message || "フォルダを選択できませんでした。";
+    }
+  });
+  ui.rescanFolder.addEventListener("click", scanMusicFolder);
   ui.files.addEventListener("change", async event => {
     const selected = Array.from(event.target.files || []).filter(file =>
       file.type.startsWith("audio/") || /\.(mp3|flac|wav|m4a|aac|ogg|opus)$/i.test(file.name)
@@ -281,6 +350,7 @@ async function boot() {
     ui.modules.textContent = String(status.moduleCount);
     ui.storage.textContent = "indexedDB" in window ? "対応" : "非対応";
     await refreshLibrary();
+    await restoreMusicFolder();
     renderPlayer();
     document.documentElement.dataset.musioState = "ready";
     console.info("[MUSIO] Ready.", status);
