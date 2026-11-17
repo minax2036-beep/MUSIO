@@ -11,6 +11,7 @@ let tracks = [];
 let seekDragging = false;
 const folderAccess = new FolderAccess();
 let musicDirectory = null;
+let folderPermissionGranted = false;
 
 system.register("environment", {
   async init() {
@@ -79,10 +80,10 @@ async function scanMusicFolder() {
     console.error("[MUSIO] Folder scan failed.", error);
     ui.folderStatus.textContent = error?.message || "フォルダを読み込めませんでした。";
     if (/権限|許可/.test(error?.message || "")) {
-      ui.rescanFolder.disabled = true;
+      folderPermissionGranted = false;
     }
   } finally {
-    ui.rescanFolder.disabled = !musicDirectory;
+    ui.rescanFolder.disabled = !folderPermissionGranted;
   }
 }
 
@@ -98,9 +99,11 @@ async function restoreMusicFolder() {
     if (!musicDirectory) return;
     const permission = await folderAccess.getPermission(musicDirectory);
     if (permission === "granted") {
+      folderPermissionGranted = true;
       ui.rescanFolder.disabled = false;
       ui.folderStatus.textContent = musicDirectory.name + " • フォルダ接続済み";
     } else {
+      folderPermissionGranted = false;
       ui.rescanFolder.disabled = true;
       ui.folderStatus.textContent = musicDirectory.name + " • 再アクセス許可が必要です";
     }
@@ -261,6 +264,7 @@ function setupControls() {
     try {
       musicDirectory = await folderAccess.chooseDirectory();
       await library.saveSetting("musicDirectory", musicDirectory);
+      folderPermissionGranted = true;
       ui.rescanFolder.disabled = false;
       await scanMusicFolder();
     } catch (error) {
