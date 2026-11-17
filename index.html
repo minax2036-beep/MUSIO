@@ -53,6 +53,7 @@
           <button class="primary-button" id="add-music" type="button"><span>＋</span> 音楽ファイルを追加</button>
           <button class="secondary-button" id="choose-folder" type="button">▣ フォルダを選択</button>
           <button class="secondary-button" id="rescan-folder" type="button" disabled>↻ 再スキャン</button>
+          <button class="secondary-button" id="parse-tags" type="button">♫ タグを解析</button>
           <span class="helper-copy">MP3 / FLAC / WAV / AAC など</span>
         </div>
         <p class="folder-status" id="folder-status" role="status">フォルダ未選択</p>
@@ -110,7 +111,7 @@
 
   <section class="player-bar" aria-label="音楽プレイヤー">
     <div class="player-track">
-      <div class="cover-art" aria-hidden="true">♫</div>
+      <div class="cover-art" id="player-cover" aria-hidden="true">♫</div>
       <div class="player-track-info">
         <strong id="now-title">再生していません</strong>
         <span id="now-subtitle">MUSIO LOCAL PLAYER</span>
