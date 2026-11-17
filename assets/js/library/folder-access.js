@@ -1,4 +1,5 @@
 const AUDIO_EXTENSIONS = /\.(mp3|flac|wav|m4a|aac|ogg|opus|aiff|aif|wma)$/i;
+const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|mkv|avi)$/i;
 
 export class FolderAccess {
   get supported() {
@@ -31,7 +32,8 @@ export class FolderAccess {
     return "prompt";
   }
 
-  async scan(handle) {
+  async scan(handle, kind = "audio") {
+    const extensions = kind === "video" ? VIDEO_EXTENSIONS : AUDIO_EXTENSIONS;
     const permission = await this.getPermission(handle);
     if (permission !== "granted") {
       throw new Error("フォルダへのアクセス権限がありません。「フォルダを選択」から再許可してください。");
@@ -43,7 +45,7 @@ export class FolderAccess {
         const relativePath = prefix ? prefix + "/" + entry.name : entry.name;
         if (entry.kind === "directory") {
           await walk(entry, relativePath);
-        } else if (entry.kind === "file" && AUDIO_EXTENSIONS.test(entry.name)) {
+        } else if (entry.kind === "file" && extensions.test(entry.name)) {
           const file = await entry.getFile();
           results.push({ file, relativePath });
         }
