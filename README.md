@@ -33,7 +33,7 @@ Music files imported into MUSIO are separate works and are not automatically cov
 
 ## Status
 
-Early development — Folder Access v0.1.
+Early development — Tag Reader v0.1.
 
 Current foundation includes:
 - Modular system lifecycle and event bus
@@ -50,11 +50,13 @@ Notes:
 - Imported audio files are not uploaded to a server.
 - Browser storage is subject to quota limits and may be cleared by browser settings.
 - Supported audio formats depend on the browser and its codecs.
-- Track artist metadata is currently a placeholder.
+- Audio tags: MP3 ID3v2.3/2.4 and ID3v1, FLAC Vorbis Comment and embedded picture, and WAV INFO tags.
+- Imported tracks are tagged automatically; use “タグを解析” to re-read metadata for tracks already in the library.
+- Unsupported formats or missing tags keep the filename as the title.
 
 Next milestones:
-1. Audio metadata extraction (title, artist, album, cover art)
-2. Playlist editing and queue persistence
-3. Improved library organization and album views
-4. Direct folder playback and storage optimization
+1. Playlist editing and queue persistence
+2. Improved library organization and album views
+3. Direct folder playback and storage optimization
+4. Additional metadata formats (MP4/M4A, Ogg)
 5. Raspberry Pi server integration
