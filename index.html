@@ -26,6 +26,7 @@
         <p class="section-label">YOUR COLLECTION</p>
         <button class="nav-item" type="button" id="create-playlist"><span class="nav-icon">＋</span>プレイリストを作成</button>
         <a class="nav-item" href="#liked" data-page="liked"><span class="nav-icon">♡</span>お気に入り</a>
+        <div class="playlist-links" id="playlist-links"></div>
       </div>
 
       <div class="sidebar-footer">
@@ -63,6 +64,7 @@
           </div>
           <span class="library-count" id="library-count">0 TRACKS</span>
         </div>
+        <div class="library-toolbar"><input id="library-search" type="search" placeholder="曲名を検索…" aria-label="曲名を検索"><select id="library-filter" aria-label="表示"><option value="all">すべての曲</option><option value="favorites">お気に入り</option></select></div>
         <div class="track-list" id="track-list">
           <div class="empty-library">
             <span class="empty-icon">♫</span>
