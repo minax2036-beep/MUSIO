@@ -13,6 +13,10 @@ let seekDragging = false;
 const folderAccess = new FolderAccess();
 let musicDirectory = null;
 let folderPermissionGranted = false;
+let videoDirectory = null;
+let videoFolderPermissionGranted = false;
+let videos = [];
+let currentVideoUrl = null;
 
 system.register("environment", {
   async init() {
@@ -45,7 +49,11 @@ const ui = {
   subtitle: $("#now-subtitle"), play: $("#play-pause"), previous: $("#previous-track"),
   next: $("#next-track"), seek: $("#seek-bar"), current: $("#current-time"),
   total: $("#total-time"), volume: $("#volume-bar"), search: $("#library-search"),
-  filter: $("#library-filter"), playlistLinks: $("#playlist-links")
+  filter: $("#library-filter"), playlistLinks: $("#playlist-links"),
+  addVideo: $("#add-video"), videoFiles: $("#video-files"), chooseVideoFolder: $("#choose-video-folder"),
+  rescanVideoFolder: $("#rescan-video-folder"), videoFolderStatus: $("#video-folder-status"),
+  videoCount: $("#video-count"), videoList: $("#video-list"), videoPlayer: $("#video-player"),
+  videoPlayerWrap: $("#video-player-wrap"), videoPlayingTitle: $("#video-playing-title")
 };
 
 function timeText(value) {
@@ -123,6 +131,75 @@ async function restoreMusicFolder() {
     console.warn("[MUSIO] Could not restore folder handle.", error);
     ui.folderStatus.textContent = "保存したフォルダ情報を復元できませんでした。";
   }
+}
+
+
+async function refreshVideos() {
+  videos = await library.getVideos();
+  ui.videoCount.textContent = videos.length + " VIDEOS";
+  ui.videoList.replaceChildren();
+  if (!videos.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-library";
+    const strong = document.createElement("strong"); strong.textContent = "まだ動画がありません";
+    const p = document.createElement("p"); p.textContent = "動画ファイルまたは動画フォルダを追加しよう。";
+    empty.append(strong, p); ui.videoList.append(empty); return;
+  }
+  videos.forEach(record => {
+    const card = document.createElement("article"); card.className = "video-card";
+    const button = document.createElement("button"); button.type = "button";
+    const thumb = document.createElement("span"); thumb.className = "video-thumb"; thumb.textContent = "▶";
+    const title = document.createElement("strong"); title.className = "video-card-title"; title.textContent = record.title;
+    const meta = document.createElement("span"); meta.className = "video-card-meta"; meta.textContent = (record.size / 1048576).toFixed(1) + " MB";
+    button.append(thumb, title, meta); button.addEventListener("click", () => playVideo(record.id));
+    card.append(button); ui.videoList.append(card);
+  });
+}
+
+async function playVideo(id) {
+  const records = await library.getVideoFiles();
+  const item = records.find(record => record.id === id);
+  if (!item) return;
+  if (currentVideoUrl) URL.revokeObjectURL(currentVideoUrl);
+  currentVideoUrl = URL.createObjectURL(item.file);
+  ui.videoPlayer.src = currentVideoUrl;
+  ui.videoPlayingTitle.textContent = item.title;
+  ui.videoPlayerWrap.hidden = false;
+  ui.videoPlayer.load();
+  try { await ui.videoPlayer.play(); }
+  catch (error) { console.info("[MUSIO] Video loaded; playback may require a user action.", error); }
+  ui.videoPlayerWrap.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+async function scanVideoFolder() {
+  if (!videoDirectory) return;
+  ui.videoFolderStatus.textContent = "動画フォルダをスキャン中…";
+  ui.rescanVideoFolder.disabled = true;
+  try {
+    const entries = await folderAccess.scan(videoDirectory, "video");
+    const result = await library.addVideos(entries.map(entry => ({ file:entry.file, relativePath:entry.relativePath, sourceId:videoDirectory.name })));
+    await refreshVideos();
+    ui.videoFolderStatus.textContent = videoDirectory.name + " • " + entries.length + " ファイル検出 / " + result.added + " 件追加 / " + result.skipped + " 件重複";
+  } catch (error) {
+    console.error("[MUSIO] Video folder scan failed.", error);
+    ui.videoFolderStatus.textContent = error?.message || "動画フォルダを読み込めませんでした。";
+    if (/権限|許可/.test(error?.message || "")) videoFolderPermissionGranted = false;
+  } finally { ui.rescanVideoFolder.disabled = !videoFolderPermissionGranted; }
+}
+
+async function restoreVideoFolder() {
+  if (!folderAccess.supported) {
+    ui.chooseVideoFolder.disabled = true;
+    ui.videoFolderStatus.textContent = "フォルダアクセス非対応。動画ファイル選択を利用してください。";
+    return;
+  }
+  try {
+    videoDirectory = await library.getSetting("videoDirectory");
+    if (!videoDirectory) return;
+    videoFolderPermissionGranted = await folderAccess.getPermission(videoDirectory) === "granted";
+    ui.rescanVideoFolder.disabled = !videoFolderPermissionGranted;
+    ui.videoFolderStatus.textContent = videoDirectory.name + (videoFolderPermissionGranted ? " • フォルダ接続済み" : " • 再アクセス許可が必要です");
+  } catch (error) { console.warn("[MUSIO] Could not restore video folder.", error); }
 }
 
 function renderTracks() {
@@ -293,6 +370,32 @@ function setupControls() {
     }
   });
   ui.rescanFolder.addEventListener("click", scanMusicFolder);
+  ui.addVideo.addEventListener("click", () => ui.videoFiles.click());
+  ui.chooseVideoFolder.addEventListener("click", async () => {
+    try {
+      videoDirectory = await folderAccess.chooseDirectory();
+      await library.saveSetting("videoDirectory", videoDirectory);
+      videoFolderPermissionGranted = true;
+      ui.rescanVideoFolder.disabled = false;
+      await scanVideoFolder();
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      ui.videoFolderStatus.textContent = error?.message || "動画フォルダを選択できませんでした。";
+    }
+  });
+  ui.rescanVideoFolder.addEventListener("click", scanVideoFolder);
+  ui.videoFiles.addEventListener("change", async event => {
+    const selected = Array.from(event.target.files || []).filter(file => file.type.startsWith("video/") || /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name));
+    if (!selected.length) return;
+    try {
+      const result = await library.addVideos(selected);
+      await refreshVideos();
+      ui.videoFolderStatus.textContent = result.added + " 件の動画を追加しました。";
+    } catch (error) {
+      console.error("[MUSIO] Video import failed.", error);
+      window.alert("動画を保存できませんでした。ブラウザの空き容量を確認してください。\n" + (error?.message || ""));
+    } finally { event.target.value = ""; }
+  });
   ui.parseTags.addEventListener("click", async () => {
     ui.parseTags.disabled = true;
     const originalLabel = ui.parseTags.textContent;
@@ -383,6 +486,8 @@ function setupNavigation() {
       ui.filter.value = "all";
       renderTracks();
       $("#library").scrollIntoView({ behavior: "smooth" });
+    } else if (item.dataset.page === "video") {
+      $("#video-library").scrollIntoView({ behavior: "smooth" });
     } else {
       $("#home").scrollIntoView({ behavior: "smooth" });
     }
@@ -401,6 +506,8 @@ async function boot() {
     ui.storage.textContent = "indexedDB" in window ? "対応" : "非対応";
     await refreshLibrary();
     await restoreMusicFolder();
+    await refreshVideos();
+    await restoreVideoFolder();
     renderPlayer();
     document.documentElement.dataset.musioState = "ready";
     console.info("[MUSIO] Ready.", status);
@@ -412,6 +519,7 @@ async function boot() {
 }
 window.addEventListener("beforeunload", () => {
   audioEngine?.destroy();
+  if (currentVideoUrl) URL.revokeObjectURL(currentVideoUrl);
   library?.close();
 }, { once: true });
 boot();
