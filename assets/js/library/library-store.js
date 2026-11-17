@@ -1,3 +1,5 @@
+import { readAudioTags } from "./metadata-reader.js";
+
 export class LibraryStore {
   #db = null;
 
@@ -44,15 +46,19 @@ export class LibraryStore {
 
   async addFiles(files) {
     const db = await this.open();
-    const candidates = Array.from(files || []).map(item => {
+    const candidates = await Promise.all(Array.from(files || []).map(async item => {
       const wrapped = item && item.file instanceof File;
       const file = wrapped ? item.file : item;
       const sourcePath = wrapped ? item.relativePath || file.name : "";
       const sourceKey = wrapped
         ? [item.sourceId || "folder", sourcePath, file.size, file.lastModified].join("|")
         : null;
-      return { file, sourcePath, sourceKey };
-    }).filter(item => item.file instanceof File);
+      const metadata = file instanceof File ? await readAudioTags(file).catch(error => {
+        console.warn("[MUSIO] Tag parsing failed:", file.name, error);
+        return {};
+      }) : {};
+      return { file, sourcePath, sourceKey, metadata };
+    })).then(items => items.filter(item => item.file instanceof File));
 
     return new Promise((resolve, reject) => {
       const tx = db.transaction("tracks", "readwrite");
@@ -73,8 +79,13 @@ export class LibraryStore {
           const record = {
             id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
             name: file.name,
-            title: file.name.replace(/\.[^.]+$/, ""),
-            artist: "不明なアーティスト",
+            title: candidate.metadata.title || file.name.replace(/\.[^.]+$/, ""),
+            artist: candidate.metadata.artist || "不明なアーティスト",
+            album: candidate.metadata.album || "",
+            genre: candidate.metadata.genre || "",
+            track: candidate.metadata.track || "",
+            coverArt: candidate.metadata.coverArt || null,
+            tagParsed: Boolean(candidate.metadata.tagParsed),
             type: file.type || "application/octet-stream",
             size: file.size,
             lastModified: file.lastModified,
@@ -102,6 +113,20 @@ export class LibraryStore {
       tx.onerror = () => reject(tx.error || new Error("音楽を保存できませんでした。"));
       tx.onabort = () => reject(tx.error || new Error("音楽の保存が中断されました。"));
     });
+  }
+
+  async updateTrackMetadata(id, metadata) {
+    const record = await this.#request("tracks", "readonly", store => store.get(id));
+    if (!record) return false;
+    record.title = metadata.title || record.name.replace(/\\.[^.]+$/, "");
+    record.artist = metadata.artist || "不明なアーティスト";
+    record.album = metadata.album || "";
+    record.genre = metadata.genre || "";
+    record.track = metadata.track || "";
+    record.coverArt = metadata.coverArt || null;
+    record.tagParsed = true;
+    await this.#request("tracks", "readwrite", store => store.put(record));
+    return true;
   }
 
   async getTracks() {
