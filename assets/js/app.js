@@ -110,7 +110,26 @@ function renderTracks() {
       await library.toggleFavorite(item.record.id);
       await refreshLibrary();
     });
-    row.append(play, favorite);
+    const addToPlaylist = document.createElement("button");
+    addToPlaylist.type = "button";
+    addToPlaylist.className = "favorite-button";
+    addToPlaylist.textContent = "+";
+    addToPlaylist.setAttribute("aria-label", "プレイリストに追加");
+    addToPlaylist.addEventListener("click", async () => {
+      const playlists = await library.getPlaylists();
+      if (!playlists.length) {
+        window.alert("先にプレイリストを作成してください。");
+        return;
+      }
+      const choices = playlists.map((playlist, i) => (i + 1) + ". " + playlist.name).join("\\n");
+      const answer = window.prompt("追加先の番号を入力してください。\\n" + choices);
+      const selected = playlists[Number(answer) - 1];
+      if (!selected) return;
+      await library.addToPlaylist(selected.id, item.record.id);
+      await renderPlaylists();
+      window.alert("「" + selected.name + "」に追加しました。");
+    });
+    row.append(play, favorite, addToPlaylist);
     ui.list.append(row);
   });
 }
