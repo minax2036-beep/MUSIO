@@ -20,6 +20,7 @@
         <a class="nav-item active" href="#home" data-page="home"><span class="nav-icon">⌂</span>ホーム</a>
         <a class="nav-item" href="#search" data-page="search"><span class="nav-icon">⌕</span>検索</a>
         <a class="nav-item" href="#library" data-page="library"><span class="nav-icon">▤</span>ライブラリ</a>
+        <a class="nav-item" href="#video-library" data-page="video"><span class="nav-icon">▣</span>動画</a>
       </nav>
 
       <div class="sidebar-section">
@@ -76,6 +77,21 @@
             <p>「音楽ファイルを追加」から、端末内の音楽を読み込もう。</p>
           </div>
         </div>
+      </section>
+
+
+      <section class="video-panel" id="video-library">
+        <div class="panel-heading"><div><p class="section-label">YOUR VIDEO COLLECTION</p><h2>動画ライブラリ</h2></div><span class="library-count" id="video-count">0 VIDEOS</span></div>
+        <div class="video-actions">
+          <button class="primary-button" id="add-video" type="button">＋ 動画ファイルを追加</button>
+          <button class="secondary-button" id="choose-video-folder" type="button">▣ 動画フォルダを選択</button>
+          <button class="secondary-button" id="rescan-video-folder" type="button" disabled>↻ 再スキャン</button>
+          <input id="video-files" class="visually-hidden" type="file" accept="video/*,.mp4,.webm,.mov,.mkv,.avi" multiple>
+        </div>
+        <p class="folder-status" id="video-folder-status" role="status">動画フォルダ未選択</p>
+        <div class="video-player-wrap" id="video-player-wrap" hidden><video id="video-player" controls playsinline preload="metadata"></video><div class="video-playing-title" id="video-playing-title">動画を再生中</div></div>
+        <div class="video-grid" id="video-list"><div class="empty-library"><span class="empty-icon">▣</span><strong>まだ動画がありません</strong><p>動画ファイルまたは動画フォルダを追加しよう。</p></div></div>
+        <p class="video-note">対応候補：MP4 / WebM / MOV / MKV / AVI。再生可否はブラウザと動画コーデックに依存します。</p>
       </section>
 
       <section class="system-panel">
