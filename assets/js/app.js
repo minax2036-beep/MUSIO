@@ -3,6 +3,7 @@ import { MusioSystem } from "./core/system.js";
 import { AudioEngine } from "./audio/engine.js";
 import { LibraryStore } from "./library/library-store.js";
 import { FolderAccess } from "./library/folder-access.js";
+import { readAudioTags } from "./library/metadata-reader.js";
 
 const system = new MusioSystem(MUSIO_CONFIG);
 let audioEngine = null;
@@ -39,6 +40,7 @@ const ui = {
   version: $("#core-version"), modules: $("#module-count"), storage: $("#storage-status"),
   nav: document.querySelectorAll("[data-page]"), add: $("#add-music"), files: $("#music-files"),
   chooseFolder: $("#choose-folder"), rescanFolder: $("#rescan-folder"), folderStatus: $("#folder-status"),
+  parseTags: $("#parse-tags"), coverArt: $("#player-cover"),
   list: $("#track-list"), count: $("#library-count"), title: $("#now-title"),
   subtitle: $("#now-subtitle"), play: $("#play-pause"), previous: $("#previous-track"),
   next: $("#next-track"), seek: $("#seek-bar"), current: $("#current-time"),
@@ -53,8 +55,18 @@ function timeText(value) {
 
 async function refreshLibrary() {
   const [records, files] = await Promise.all([library.getTracks(), library.getFiles()]);
+  for (const item of tracks) {
+    if (item.file.__musioCoverUrl) URL.revokeObjectURL(item.file.__musioCoverUrl);
+  }
   const fileMap = new Map(files.map(item => [item.id, item.file]));
-  tracks = records.map(record => ({ record, file: fileMap.get(record.id) })).filter(item => item.file);
+  tracks = records.map(record => {
+    const file = fileMap.get(record.id);
+    if (file) {
+      file.__musioMetadata = { title: record.title, artist: record.artist, album: record.album };
+      file.__musioCoverUrl = record.coverArt ? URL.createObjectURL(record.coverArt) : "";
+    }
+    return { record, file };
+  }).filter(item => item.file);
   renderTracks();
   await renderPlaylists();
 }
@@ -149,7 +161,7 @@ function renderTracks() {
     name.textContent = item.record.title;
     const meta = document.createElement("span");
     meta.className = "track-meta";
-    meta.textContent = (item.record.size / 1048576).toFixed(1) + " MB";
+    meta.textContent = [item.record.artist, item.record.album, (item.record.size / 1048576).toFixed(1) + " MB"].filter(Boolean).join(" • ");
     details.append(name, meta);
     play.append(number, details);
     play.addEventListener("click", async () => {
@@ -232,7 +244,14 @@ function renderPlaylistTracks(items) {
 function renderPlayer(state = audioEngine?.getState()) {
   if (!state) return;
   ui.title.textContent = state.title;
-  ui.subtitle.textContent = state.fileName ? "LOCAL FILE • " + (state.index + 1) + " / " + state.queueLength : "MUSIO LOCAL PLAYER";
+  ui.subtitle.textContent = state.track
+    ? [state.artist || "不明なアーティスト", state.album, (state.index + 1) + " / " + state.queueLength].filter(Boolean).join(" • ")
+    : "MUSIO LOCAL PLAYER";
+  if (ui.coverArt) {
+    ui.coverArt.style.backgroundImage = state.coverUrl ? "url(\"" + state.coverUrl + "\")" : "";
+    ui.coverArt.textContent = state.coverUrl ? "" : "♫";
+    ui.coverArt.classList.toggle("has-image", Boolean(state.coverUrl));
+  }
   ui.play.disabled = !state.track;
   ui.play.textContent = state.paused ? "▶" : "Ⅱ";
   ui.play.setAttribute("aria-label", state.paused ? "再生" : "一時停止");
@@ -274,6 +293,31 @@ function setupControls() {
     }
   });
   ui.rescanFolder.addEventListener("click", scanMusicFolder);
+  ui.parseTags.addEventListener("click", async () => {
+    ui.parseTags.disabled = true;
+    const originalLabel = ui.parseTags.textContent;
+    try {
+      const current = await library.getTracks();
+      let completed = 0;
+      for (const record of current) {
+        const fileRecord = (await library.getFiles()).find(item => item.id === record.id);
+        if (fileRecord) {
+          const metadata = await readAudioTags(fileRecord.file);
+          await library.updateTrackMetadata(record.id, metadata);
+        }
+        completed += 1;
+        ui.parseTags.textContent = "解析中 " + completed + "/" + current.length;
+      }
+      await refreshLibrary();
+      ui.folderStatus.textContent = current.length + " 曲のタグ解析が完了しました。";
+    } catch (error) {
+      console.error("[MUSIO] Tag parsing failed.", error);
+      ui.folderStatus.textContent = error?.message || "タグ解析に失敗しました。";
+    } finally {
+      ui.parseTags.disabled = false;
+      ui.parseTags.textContent = originalLabel;
+    }
+  });
   ui.files.addEventListener("change", async event => {
     const selected = Array.from(event.target.files || []).filter(file =>
       file.type.startsWith("audio/") || /\.(mp3|flac|wav|m4a|aac|ogg|opus)$/i.test(file.name)
