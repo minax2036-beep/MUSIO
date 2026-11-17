@@ -5,7 +5,7 @@ export class LibraryStore {
 
   constructor(config = {}) {
     this.databaseName = config.databaseName || "musio-db";
-    this.databaseVersion = config.databaseVersion || 2;
+    this.databaseVersion = config.databaseVersion || 3;
   }
 
   async open() {
@@ -18,6 +18,10 @@ export class LibraryStore {
           const tracks = db.createObjectStore("tracks", { keyPath: "id" });
           tracks.createIndex("addedAt", "addedAt");
           tracks.createIndex("favorite", "favorite");
+        }
+        if (!db.objectStoreNames.contains("videos")) {
+          const videos = db.createObjectStore("videos", { keyPath: "id" });
+          videos.createIndex("addedAt", "addedAt");
         }
         if (!db.objectStoreNames.contains("playlists")) {
           db.createObjectStore("playlists", { keyPath: "id" });
@@ -136,6 +140,58 @@ export class LibraryStore {
 
   async getFiles() {
     const records = await this.#request("tracks", "readonly", store => store.getAll());
+    return records.map(record => ({
+      ...record,
+      file: new File([record.blob], record.name, { type: record.type, lastModified: record.lastModified })
+    }));
+  }
+
+
+  async addVideos(items) {
+    const db = await this.open();
+    const candidates = Array.from(items || []).map(item => {
+      const wrapped = item && item.file instanceof File;
+      const file = wrapped ? item.file : item;
+      const sourcePath = wrapped ? item.relativePath || file.name : "";
+      const sourceKey = wrapped ? [item.sourceId || "video-folder", sourcePath, file.size, file.lastModified].join("|") : null;
+      return { file, sourcePath, sourceKey };
+    }).filter(item => item.file instanceof File);
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("videos", "readwrite");
+      const store = tx.objectStore("videos");
+      const request = store.getAll();
+      let added = 0;
+      let skipped = 0;
+      request.onsuccess = () => {
+        const keys = new Set(request.result.map(record => record.sourceKey).filter(Boolean));
+        for (const item of candidates) {
+          if (item.sourceKey && keys.has(item.sourceKey)) { skipped += 1; continue; }
+          const file = item.file;
+          store.put({
+            id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
+            name: file.name, title: file.name.replace(/\.[^.]+$/, ""),
+            type: file.type || "application/octet-stream", size: file.size,
+            lastModified: file.lastModified, addedAt: Date.now(),
+            sourcePath: item.sourcePath, sourceKey: item.sourceKey, blob: file
+          });
+          if (item.sourceKey) keys.add(item.sourceKey);
+          added += 1;
+        }
+      };
+      request.onerror = () => { try { tx.abort(); } catch {} reject(request.error || new Error("動画一覧を確認できませんでした。")); };
+      tx.oncomplete = () => resolve({ added, skipped });
+      tx.onerror = () => reject(tx.error || new Error("動画を保存できませんでした。"));
+      tx.onabort = () => reject(tx.error || new Error("動画の保存が中断されました。"));
+    });
+  }
+
+  async getVideos() {
+    const records = await this.#request("videos", "readonly", store => store.getAll());
+    return records.sort((a, b) => b.addedAt - a.addedAt).map(({ blob, ...record }) => record);
+  }
+
+  async getVideoFiles() {
+    const records = await this.#request("videos", "readonly", store => store.getAll());
     return records.map(record => ({
       ...record,
       file: new File([record.blob], record.name, { type: record.type, lastModified: record.lastModified })
