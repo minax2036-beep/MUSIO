@@ -4,6 +4,7 @@ import { AudioEngine } from "./audio/engine.js";
 import { LibraryStore } from "./library/library-store.js";
 import { FolderAccess } from "./library/folder-access.js";
 import { readAudioTags } from "./library/metadata-reader.js";
+import { VideoEngine } from "./video/engine.js";
 
 const system = new MusioSystem(MUSIO_CONFIG);
 let audioEngine = null;
@@ -16,7 +17,7 @@ let folderPermissionGranted = false;
 let videoDirectory = null;
 let videoFolderPermissionGranted = false;
 let videos = [];
-let currentVideoUrl = null;
+let videoEngine = null;
 
 system.register("environment", {
   async init() {
@@ -160,9 +161,7 @@ async function playVideo(id) {
   const records = await library.getVideoFiles();
   const item = records.find(record => record.id === id);
   if (!item) return;
-  if (currentVideoUrl) URL.revokeObjectURL(currentVideoUrl);
-  currentVideoUrl = URL.createObjectURL(item.file);
-  ui.videoPlayer.src = currentVideoUrl;
+  videoEngine.load(item.file);
   ui.videoPlayingTitle.textContent = item.title;
   ui.videoPlayerWrap.hidden = false;
   ui.videoPlayer.load();
@@ -500,6 +499,7 @@ async function boot() {
     setupEvents();
     setupControls();
     await system.start();
+    videoEngine = new VideoEngine(ui.videoPlayer);
     const status = system.getStatus();
     ui.version.textContent = "v" + status.version;
     ui.modules.textContent = String(status.moduleCount);
@@ -519,7 +519,7 @@ async function boot() {
 }
 window.addEventListener("beforeunload", () => {
   audioEngine?.destroy();
-  if (currentVideoUrl) URL.revokeObjectURL(currentVideoUrl);
+  videoEngine?.destroy();
   library?.close();
 }, { once: true });
 boot();
