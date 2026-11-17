@@ -60,3 +60,13 @@ Next milestones:
 3. Direct folder playback and storage optimization
 4. Additional metadata formats (MP4/M4A, Ogg)
 5. Raspberry Pi server integration
+
+
+## Video Library v0.1
+
+- Separate IndexedDB `videos` store; existing music tracks and playlists are preserved.
+- Add individual video files or recursively scan a selected folder.
+- Remember the selected video folder handle and offer rescanning when permission remains available.
+- Play locally stored videos in the built-in HTML video player.
+- Initial extension filter: MP4, WebM, MOV, MKV, AVI. Actual playback depends on browser codec support.
+- Video files are stored separately from audio tracks; video metadata, thumbnails, history, and unified search are future milestones.
