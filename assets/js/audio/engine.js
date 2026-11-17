@@ -155,7 +155,10 @@ export class AudioEngine {
     const file = this.#queue[this.#index] || null;
     return {
       track: file,
-      title: file ? file.name.replace(/\.[^.]+$/, "") : "再生していません",
+      title: file ? (file.__musioMetadata?.title || file.name.replace(/\.[^.]+$/, "")) : "再生していません",
+      artist: file?.__musioMetadata?.artist || "",
+      album: file?.__musioMetadata?.album || "",
+      coverUrl: file?.__musioCoverUrl || "",
       fileName: file?.name || "",
       index: this.#index,
       queueLength: this.#queue.length,
