@@ -18,6 +18,7 @@ MUSIO is an open-source music system focused on managing and playing music from 
 | Client | HTML5, CSS3, Vanilla JavaScript |
 | Playback | HTMLAudioElement, Web Audio API |
 | Local database | IndexedDB |
+| Folder access | File System Access API |
 | Future server | Python, FastAPI, SQLite |
 
 ## Music policy
@@ -32,26 +33,28 @@ Music files imported into MUSIO are separate works and are not automatically cov
 
 ## Status
 
-Early development — Library v0.1.0.
+Early development — Folder Access v0.1.
 
 Current foundation includes:
 - Modular system lifecycle and event bus
-- Browser environment detection
 - Local audio playback with queue, previous/next, seek, and volume
-- IndexedDB music library that persists imported audio files and track information
-- Library search and favorites
-- Playlist creation and adding tracks to playlists
+- IndexedDB music library with saved audio files, favorites, and playlists
+- Library search
+- Browser folder selection, recursive audio scanning, and repeat-scan duplicate detection
 - Responsive dark player interface
 
 Notes:
-- Imported audio files are stored in the browser's local IndexedDB storage. They are not uploaded to a server.
-- Browser storage is subject to the browser's quota and may be cleared by the user or browser settings.
-- Supported audio formats depend on the browser and its available codecs.
-- Track artist metadata is currently a placeholder; metadata extraction is a future milestone.
+- Folder access uses the browser File System Access API and requires a supported Chromium-based browser in a secure context (such as GitHub Pages HTTPS).
+- The selected folder handle is stored in IndexedDB. Browsers may still ask for permission again.
+- Folder scanning imports audio file data into IndexedDB; it does not stream directly from the original folder.
+- Imported audio files are not uploaded to a server.
+- Browser storage is subject to quota limits and may be cleared by browser settings.
+- Supported audio formats depend on the browser and its codecs.
+- Track artist metadata is currently a placeholder.
 
 Next milestones:
-1. Folder access and automatic library scanning
-2. Audio metadata extraction (title, artist, album, cover art)
-3. Playlist editing and queue persistence
-4. Improved library organization and album views
+1. Audio metadata extraction (title, artist, album, cover art)
+2. Playlist editing and queue persistence
+3. Improved library organization and album views
+4. Direct folder playback and storage optimization
 5. Raspberry Pi server integration
