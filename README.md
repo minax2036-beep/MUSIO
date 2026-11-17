@@ -32,23 +32,26 @@ Music files imported into MUSIO are separate works and are not automatically cov
 
 ## Status
 
-Early development — Audio Engine v0.1.0.
+Early development — Library v0.1.0.
 
 Current foundation includes:
 - Modular system lifecycle and event bus
 - Browser environment detection
-- Local audio file import (temporary browser session)
-- Playback, pause, previous/next, seek, and volume controls
+- Local audio playback with queue, previous/next, seek, and volume
+- IndexedDB music library that persists imported audio files and track information
+- Library search and favorites
+- Playlist creation and adding tracks to playlists
 - Responsive dark player interface
 
 Notes:
-- Imported files are held in memory as browser file references; they are not uploaded or copied to a server.
-- The current library is temporary and must be selected again after a page reload.
+- Imported audio files are stored in the browser's local IndexedDB storage. They are not uploaded to a server.
+- Browser storage is subject to the browser's quota and may be cleared by the user or browser settings.
 - Supported audio formats depend on the browser and its available codecs.
+- Track artist metadata is currently a placeholder; metadata extraction is a future milestone.
 
 Next milestones:
-1. Folder access and persistent library
-2. Track metadata and search
-3. IndexedDB storage
-4. Playlists and queue persistence
+1. Folder access and automatic library scanning
+2. Audio metadata extraction (title, artist, album, cover art)
+3. Playlist editing and queue persistence
+4. Improved library organization and album views
 5. Raspberry Pi server integration
