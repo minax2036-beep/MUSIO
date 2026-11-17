@@ -1,4 +1,4 @@
-const AUDIO_EXTENSIONS = /\\.(mp3|flac|wav|m4a|aac|ogg|opus|aiff|aif|wma)$/i;
+const AUDIO_EXTENSIONS = /\.(mp3|flac|wav|m4a|aac|ogg|opus|aiff|aif|wma)$/i;
 
 export class FolderAccess {
   get supported() {
