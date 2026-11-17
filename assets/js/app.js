@@ -1,183 +1,254 @@
 import { MUSIO_CONFIG } from "./core/config.js";
 import { MusioSystem } from "./core/system.js";
 import { AudioEngine } from "./audio/engine.js";
+import { LibraryStore } from "./library/library-store.js";
 
 const system = new MusioSystem(MUSIO_CONFIG);
 let audioEngine = null;
+let library = null;
+let tracks = [];
 let seekDragging = false;
 
-const audioModule = {
+system.register("environment", {
   async init() {
-    audioEngine = new AudioEngine(system.events);
-  },
-  destroy() {
-    audioEngine?.destroy();
-  }
-};
-
-const browserEnvironmentModule = {
-  async init() {
-    const supported = {
+    system.events.emit("environment:checked", {
       audio: typeof window.Audio !== "undefined",
       indexedDB: "indexedDB" in window,
       fileApi: "File" in window
-    };
-    system.events.emit("environment:checked", supported);
+    });
   }
+});
+system.register("library", {
+  async init() {
+    library = new LibraryStore(MUSIO_CONFIG.storage);
+    await library.open();
+  },
+  destroy() { library?.close(); }
+});
+system.register("audio-engine", {
+  async init() { audioEngine = new AudioEngine(system.events); },
+  destroy() { audioEngine?.destroy(); }
+});
+
+const $ = selector => document.querySelector(selector);
+const ui = {
+  version: $("#core-version"), modules: $("#module-count"), storage: $("#storage-status"),
+  nav: document.querySelectorAll("[data-page]"), add: $("#add-music"), files: $("#music-files"),
+  list: $("#track-list"), count: $("#library-count"), title: $("#now-title"),
+  subtitle: $("#now-subtitle"), play: $("#play-pause"), previous: $("#previous-track"),
+  next: $("#next-track"), seek: $("#seek-bar"), current: $("#current-time"),
+  total: $("#total-time"), volume: $("#volume-bar"), search: $("#library-search"),
+  filter: $("#library-filter"), playlistLinks: $("#playlist-links")
 };
 
-system.register("environment", browserEnvironmentModule);
-system.register("audio-engine", audioModule);
-
-const elements = {
-  version: document.querySelector("#core-version"),
-  moduleCount: document.querySelector("#module-count"),
-  storageStatus: document.querySelector("#storage-status"),
-  navItems: document.querySelectorAll("[data-page]"),
-  addMusic: document.querySelector("#add-music"),
-  fileInput: document.querySelector("#music-files"),
-  trackList: document.querySelector("#track-list"),
-  libraryCount: document.querySelector("#library-count"),
-  nowTitle: document.querySelector("#now-title"),
-  nowSubtitle: document.querySelector("#now-subtitle"),
-  playPause: document.querySelector("#play-pause"),
-  previous: document.querySelector("#previous-track"),
-  next: document.querySelector("#next-track"),
-  seek: document.querySelector("#seek-bar"),
-  currentTime: document.querySelector("#current-time"),
-  totalTime: document.querySelector("#total-time"),
-  volume: document.querySelector("#volume-bar")
-};
-
-function formatTime(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.floor(seconds % 60).toString().padStart(2, "0");
-  return minutes + ":" + remainder;
+function timeText(value) {
+  if (!Number.isFinite(value) || value < 0) return "0:00";
+  return Math.floor(value / 60) + ":" + String(Math.floor(value % 60)).padStart(2, "0");
 }
 
-function renderSystemStatus() {
-  const status = system.getStatus();
-  elements.version.textContent = "v" + status.version;
-  elements.moduleCount.textContent = String(status.moduleCount);
-  elements.storageStatus.textContent = "IndexedDB" in window ? "対応" : "非対応";
+async function refreshLibrary() {
+  const [records, files] = await Promise.all([library.getTracks(), library.getFiles()]);
+  const fileMap = new Map(files.map(item => [item.id, item.file]));
+  tracks = records.map(record => ({ record, file: fileMap.get(record.id) })).filter(item => item.file);
+  renderTracks();
+  await renderPlaylists();
 }
 
-function renderTrackList(state = audioEngine?.getState()) {
-  if (!state) return;
-  elements.libraryCount.textContent = state.queueLength + " TRACKS";
-
-  if (!state.queueLength) {
-    elements.trackList.innerHTML = '<div class="empty-library"><span class="empty-icon">♫</span><strong>まだ音楽がありません</strong><p>「音楽ファイルを追加」から、端末内の音楽を読み込もう。</p></div>';
+function renderTracks() {
+  const query = ui.search.value.trim().toLocaleLowerCase();
+  const favoritesOnly = ui.filter.value === "favorites";
+  const filtered = tracks.filter(item => {
+    const matches = (item.record.title + " " + item.record.name).toLocaleLowerCase().includes(query);
+    return matches && (!favoritesOnly || item.record.favorite);
+  });
+  ui.count.textContent = filtered.length + " / " + tracks.length + " TRACKS";
+  ui.list.replaceChildren();
+  if (!filtered.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-library";
+    const strong = document.createElement("strong");
+    strong.textContent = tracks.length ? "該当する曲がありません" : "まだ音楽がありません";
+    const p = document.createElement("p");
+    p.textContent = tracks.length ? "検索条件を変更してみてください。" : "「音楽ファイルを追加」から音楽を読み込もう。";
+    empty.append(strong, p);
+    ui.list.append(empty);
     return;
   }
-
-  const files = state.track ? window.__musioQueueFiles : null;
-  if (!files) return;
-
-  elements.trackList.replaceChildren();
-  files.forEach((file, index) => {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "track-row" + (index === state.index ? " active" : "");
-    row.setAttribute("aria-label", "再生: " + file.name);
+  filtered.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "track-row";
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "track-main";
     const number = document.createElement("span");
     number.className = "track-number";
-    number.textContent = index === state.index ? "♫" : String(index + 1).padStart(2, "0");
-    const name = document.createElement("span");
+    number.textContent = String(index + 1).padStart(2, "0");
+    const details = document.createElement("span");
+    details.className = "track-details";
+    const name = document.createElement("strong");
     name.className = "track-name";
-    name.textContent = file.name.replace(/\.[^.]+$/, "");
+    name.textContent = item.record.title;
     const meta = document.createElement("span");
     meta.className = "track-meta";
-    meta.textContent = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-    row.append(number, name, meta);
-    row.addEventListener("click", async () => {
-      audioEngine.setQueue(files, index);
+    meta.textContent = (item.record.size / 1048576).toFixed(1) + " MB";
+    details.append(name, meta);
+    play.append(number, details);
+    play.addEventListener("click", async () => {
+      const queue = filtered.map(entry => {
+        Object.defineProperty(entry.file, "__musioId", { value: entry.record.id, configurable: true });
+        return entry.file;
+      });
+      audioEngine.setQueue(queue, index);
       await audioEngine.play();
     });
-    elements.trackList.append(row);
+    const favorite = document.createElement("button");
+    favorite.type = "button";
+    favorite.className = "favorite-button" + (item.record.favorite ? " selected" : "");
+    favorite.textContent = item.record.favorite ? "♥" : "♡";
+    favorite.setAttribute("aria-label", "お気に入り切り替え");
+    favorite.addEventListener("click", async () => {
+      await library.toggleFavorite(item.record.id);
+      await refreshLibrary();
+    });
+    row.append(play, favorite);
+    ui.list.append(row);
+  });
+}
+
+async function renderPlaylists() {
+  const playlists = await library.getPlaylists();
+  ui.playlistLinks.replaceChildren();
+  playlists.forEach(playlist => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "playlist-link";
+    button.textContent = "♫ " + playlist.name + " (" + playlist.trackIds.length + ")";
+    button.addEventListener("click", () => {
+      const chosen = tracks.filter(item => playlist.trackIds.includes(item.record.id));
+      renderPlaylistTracks(chosen);
+    });
+    ui.playlistLinks.append(button);
+  });
+}
+
+function renderPlaylistTracks(items) {
+  ui.list.replaceChildren();
+  ui.count.textContent = items.length + " PLAYLIST TRACKS";
+  items.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "track-row";
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "track-main";
+    play.textContent = String(index + 1).padStart(2, "0") + "　" + item.record.title;
+    play.addEventListener("click", async () => {
+      const queue = items.map(entry => entry.file);
+      audioEngine.setQueue(queue, index);
+      await audioEngine.play();
+    });
+    row.append(play);
+    ui.list.append(row);
   });
 }
 
 function renderPlayer(state = audioEngine?.getState()) {
   if (!state) return;
-  elements.nowTitle.textContent = state.title;
-  elements.nowSubtitle.textContent = state.fileName ? "LOCAL FILE • " + (state.index + 1) + " / " + state.queueLength : "MUSIO LOCAL PLAYER";
-  elements.playPause.disabled = !state.track;
-  elements.playPause.textContent = state.paused ? "▶" : "Ⅱ";
-  elements.playPause.setAttribute("aria-label", state.paused ? "再生" : "一時停止");
-  elements.seek.disabled = !state.track || !state.duration;
-  elements.seek.max = String(Math.max(1, Math.floor(state.duration * 10)));
-  if (!seekDragging) elements.seek.value = String(Math.floor(state.currentTime * 10));
-  elements.currentTime.textContent = formatTime(state.currentTime);
-  elements.totalTime.textContent = formatTime(state.duration);
-  elements.volume.value = String(Math.round(state.volume * 100));
+  ui.title.textContent = state.title;
+  ui.subtitle.textContent = state.fileName ? "LOCAL FILE • " + (state.index + 1) + " / " + state.queueLength : "MUSIO LOCAL PLAYER";
+  ui.play.disabled = !state.track;
+  ui.play.textContent = state.paused ? "▶" : "Ⅱ";
+  ui.play.setAttribute("aria-label", state.paused ? "再生" : "一時停止");
+  ui.seek.disabled = !state.track || !state.duration;
+  ui.seek.max = String(Math.max(1, Math.floor(state.duration * 10)));
+  if (!seekDragging) ui.seek.value = String(Math.floor(state.currentTime * 10));
+  ui.current.textContent = timeText(state.currentTime);
+  ui.total.textContent = timeText(state.duration);
+  ui.volume.value = String(Math.round(state.volume * 100));
 }
 
 function setupEvents() {
-  system.events.on("track:change", (state) => {
+  ["track:change", "queue:change"].forEach(name => system.events.on(name, state => {
     renderPlayer(state);
-    renderTrackList(state);
+    renderTracks();
+  }));
+  ["audio:timeupdate", "audio:metadata", "audio:play", "audio:pause", "audio:volumechange", "audio:ended"].forEach(name => {
+    system.events.on(name, renderPlayer);
   });
-  system.events.on("queue:change", (state) => {
-    renderPlayer(state);
-    renderTrackList(state);
-  });
-  system.events.on("audio:timeupdate", renderPlayer);
-  system.events.on("audio:metadata", renderPlayer);
-  system.events.on("audio:play", renderPlayer);
-  system.events.on("audio:pause", renderPlayer);
-  system.events.on("audio:volumechange", renderPlayer);
-  system.events.on("audio:ended", renderPlayer);
-  system.events.on("audio:error", (detail) => {
+  system.events.on("audio:error", detail => {
     renderPlayer(detail);
     if (detail.message) window.alert(detail.message);
   });
 }
 
 function setupControls() {
-  elements.addMusic.addEventListener("click", () => elements.fileInput.click());
-
-  elements.fileInput.addEventListener("change", async (event) => {
-    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith("audio/") || /\.(mp3|flac|wav|m4a|aac|ogg|opus)$/i.test(file.name));
-    if (!files.length) return;
-    window.__musioQueueFiles = files;
-    audioEngine.setQueue(files, 0);
-    renderTrackList();
-    await audioEngine.play();
-    event.target.value = "";
+  ui.add.addEventListener("click", () => ui.files.click());
+  ui.files.addEventListener("change", async event => {
+    const selected = Array.from(event.target.files || []).filter(file =>
+      file.type.startsWith("audio/") || /\.(mp3|flac|wav|m4a|aac|ogg|opus)$/i.test(file.name)
+    );
+    if (!selected.length) return;
+    try {
+      await library.addFiles(selected);
+      await refreshLibrary();
+      const firstRecord = tracks.find(item => item.record.name === selected[0].name && item.record.size === selected[0].size);
+      const queue = tracks.map(item => {
+        Object.defineProperty(item.file, "__musioId", { value: item.record.id, configurable: true });
+        return item.file;
+      });
+      const startIndex = firstRecord ? queue.findIndex(file => file.__musioId === firstRecord.record.id) : 0;
+      audioEngine.setQueue(queue, Math.max(0, startIndex));
+      await audioEngine.play();
+    } catch (error) {
+      console.error("[MUSIO] Import failed.", error);
+      window.alert("音楽を保存できませんでした。ブラウザの空き容量を確認してください。\n" + (error?.message || ""));
+    } finally {
+      event.target.value = "";
+    }
   });
-
-  elements.playPause.addEventListener("click", () => audioEngine.toggle());
-  elements.previous.addEventListener("click", () => audioEngine.previous());
-  elements.next.addEventListener("click", () => audioEngine.next());
-
-  elements.seek.addEventListener("input", () => {
+  ui.play.addEventListener("click", () => audioEngine.toggle());
+  ui.previous.addEventListener("click", () => audioEngine.previous());
+  ui.next.addEventListener("click", () => audioEngine.next());
+  ui.seek.addEventListener("input", () => {
     seekDragging = true;
-    const seconds = Number(elements.seek.value) / 10;
-    elements.currentTime.textContent = formatTime(seconds);
+    ui.current.textContent = timeText(Number(ui.seek.value) / 10);
   });
-  elements.seek.addEventListener("change", () => {
-    audioEngine.seek(Number(elements.seek.value) / 10);
+  ui.seek.addEventListener("change", () => {
+    audioEngine.seek(Number(ui.seek.value) / 10);
     seekDragging = false;
   });
-
-  elements.volume.addEventListener("input", () => {
-    audioEngine.setVolume(Number(elements.volume.value) / 100);
-  });
-
-  document.querySelector("#create-playlist")?.addEventListener("click", () => {
-    window.alert("プレイリスト機能は次の開発段階で追加します。");
+  ui.volume.addEventListener("input", () => audioEngine.setVolume(Number(ui.volume.value) / 100));
+  ui.search.addEventListener("input", renderTracks);
+  ui.filter.addEventListener("change", renderTracks);
+  $("#create-playlist").addEventListener("click", async () => {
+    const name = window.prompt("プレイリスト名を入力してください");
+    if (!name || !name.trim()) return;
+    try {
+      await library.createPlaylist(name);
+      await renderPlaylists();
+    } catch (error) {
+      window.alert(error.message || "作成できませんでした。");
+    }
   });
 }
 
 function setupNavigation() {
-  for (const item of elements.navItems) {
-    item.addEventListener("click", () => {
-      for (const navItem of elements.navItems) navItem.classList.toggle("active", navItem === item);
-      system.events.emit("navigation:change", { page: item.dataset.page });
-    });
-  }
+  ui.nav.forEach(item => item.addEventListener("click", () => {
+    ui.nav.forEach(nav => nav.classList.toggle("active", nav === item));
+    if (item.dataset.page === "liked") {
+      ui.filter.value = "favorites";
+      renderTracks();
+      $("#library").scrollIntoView({ behavior: "smooth" });
+    } else if (item.dataset.page === "search") {
+      ui.search.focus();
+      $("#library").scrollIntoView({ behavior: "smooth" });
+    } else if (item.dataset.page === "library") {
+      ui.filter.value = "all";
+      renderTracks();
+      $("#library").scrollIntoView({ behavior: "smooth" });
+    } else {
+      $("#home").scrollIntoView({ behavior: "smooth" });
+    }
+  }));
 }
 
 async function boot() {
@@ -185,17 +256,23 @@ async function boot() {
     setupNavigation();
     setupEvents();
     setupControls();
-    system.events.on("system:ready", renderSystemStatus);
     await system.start();
-    renderSystemStatus();
+    const status = system.getStatus();
+    ui.version.textContent = "v" + status.version;
+    ui.modules.textContent = String(status.moduleCount);
+    ui.storage.textContent = "indexedDB" in window ? "対応" : "非対応";
+    await refreshLibrary();
     renderPlayer();
     document.documentElement.dataset.musioState = "ready";
-    console.info("[MUSIO] System ready.", system.getStatus());
+    console.info("[MUSIO] Ready.", status);
   } catch (error) {
     document.documentElement.dataset.musioState = "error";
     console.error("[MUSIO] Startup failed.", error);
+    window.alert("MUSIOの起動に失敗しました。\n" + (error?.message || ""));
   }
 }
-
-window.addEventListener("beforeunload", () => audioEngine?.destroy(), { once: true });
+window.addEventListener("beforeunload", () => {
+  audioEngine?.destroy();
+  library?.close();
+}, { once: true });
 boot();
