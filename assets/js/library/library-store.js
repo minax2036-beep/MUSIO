@@ -118,7 +118,7 @@ export class LibraryStore {
   async updateTrackMetadata(id, metadata) {
     const record = await this.#request("tracks", "readonly", store => store.get(id));
     if (!record) return false;
-    record.title = metadata.title || record.name.replace(/\\.[^.]+$/, "");
+    record.title = metadata.title || record.name.replace(/\.[^.]+$/, "");
     record.artist = metadata.artist || "不明なアーティスト";
     record.album = metadata.album || "";
     record.genre = metadata.genre || "";
